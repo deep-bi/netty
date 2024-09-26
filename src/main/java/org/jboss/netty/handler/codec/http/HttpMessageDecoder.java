@@ -731,6 +731,12 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
             }
         }
 
+        // Backported PR https://github.com/netty/netty/pull/9871
+        if (nameEnd == length) {
+            // There was no colon present at all.
+            throw new IllegalArgumentException("No colon found");
+        }
+
         for (colonEnd = nameEnd; colonEnd < length; colonEnd ++) {
             if (sb.charAt(colonEnd) == ':') {
                 colonEnd ++;
