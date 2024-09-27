@@ -15,19 +15,14 @@
  */
 package org.jboss.netty.handler.codec.http.multipart;
 
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.handler.codec.http.DefaultHttpChunk;
-import org.jboss.netty.handler.codec.http.DefaultHttpRequest;
-import org.jboss.netty.handler.codec.http.HttpChunk;
-import org.jboss.netty.handler.codec.http.HttpHeaders;
-import org.jboss.netty.handler.codec.http.HttpMethod;
-import org.jboss.netty.handler.codec.http.HttpVersion;
-import org.jboss.netty.util.CharsetUtil;
-import org.junit.Test;
+import static org.junit.Assert.*;
 
 import java.util.Arrays;
 
-import static org.junit.Assert.*;
+import org.jboss.netty.buffer.ChannelBuffers;
+import org.jboss.netty.handler.codec.http.*;
+import org.jboss.netty.util.CharsetUtil;
+import org.junit.Test;
 
 /** {@link HttpPostRequestDecoder} test case. */
 public class HttpPostRequestDecoderTest {
@@ -180,7 +175,8 @@ public class HttpPostRequestDecoderTest {
                     new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
         defaultHttpRequest.setChunked(true);
 
-        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(defaultHttpRequest);
+        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(defaultHttpRequest, 140,
+          HttpPostRequestDecoder.DEFAULT_MAX_BUFFERED_BYTES);
 
         int firstChunk = 10;
         int middleChunk = 1024;
@@ -229,5 +225,90 @@ public class HttpPostRequestDecoderTest {
         // Create decoder instance to test.
         final HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(inMemoryFactory, req);
         assertFalse(decoder.getBodyHttpDatas().isEmpty());
+    }
+
+    @Test
+    public void testTooManyFormFieldsPostStandardDecoder() throws HttpPostRequestDecoder.ErrorDataDecoderException {
+        HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(req, 1024, -1);
+        int num = 0;
+        while (true) {
+            try {
+                decoder.offer(new DefaultHttpChunk(ChannelBuffers.wrappedBuffer("foo=bar&".getBytes())));
+            } catch (RuntimeException e) {
+                assertEquals(HttpPostRequestDecoder.TooManyFormFieldsException.class, e.getClass());
+                break;
+            }
+            assertTrue(num++ < 1024);
+        }
+        assertEquals(1024, num);
+    }
+    @Test
+    public void testTooManyFormFieldsPostMultipartDecoder() throws HttpPostRequestDecoder.ErrorDataDecoderException {
+        HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+        req.headers().add("Content-Type", "multipart/form-data;boundary=be38b42a9ad2713f");
+        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(req, 1024, -1);
+        decoder.offer(new DefaultHttpChunk(ChannelBuffers.wrappedBuffer("--be38b42a9ad2713f\n".getBytes())));
+        int num = 0;
+        while (true) {
+            try {
+                byte[] bodyBytes = ("content-disposition: form-data; name=\"title\"\n" +
+                  "content-length: 10\n" +
+                  "content-type: text/plain; charset=UTF-8\n" +
+                  "\n" +
+                  "bar-stream\n" +
+                  "--be38b42a9ad2713f\n").getBytes();
+                decoder.offer(new DefaultHttpChunk(ChannelBuffers.wrappedBuffer(bodyBytes)));
+            } catch (RuntimeException e) {
+                assertEquals(HttpPostRequestDecoder.TooManyFormFieldsException.class, e.getClass());
+                break;
+            }
+            assertTrue(num++ < 1024);
+        }
+        assertEquals(1024, num);
+    }
+    @Test
+    public void testTooLongFormFieldStandardDecoder() throws HttpPostRequestDecoder.ErrorDataDecoderException {
+        HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(req, -1, 16 * 1024);
+        try {
+            decoder.offer(new DefaultHttpChunk(ChannelBuffers.wrappedBuffer(new byte[16 * 1024 + 1])));
+            fail();
+        } catch (RuntimeException e) {
+            assertEquals(HttpPostRequestDecoder.TooLongFormFieldException.class, e.getClass());
+        }
+    }
+    @Test
+    public void testFieldGreaterThanMaxBufferedBytesStandardDecoder()
+			throws HttpPostRequestDecoder.ErrorDataDecoderException {
+        HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(req, -1, 6);
+        decoder.offer(new DefaultHttpChunk(ChannelBuffers.wrappedBuffer("foo=bar".getBytes())));
+    }
+    @Test
+    public void testTooLongFormFieldMultipartDecoder() throws HttpPostRequestDecoder.ErrorDataDecoderException {
+        HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+        req.headers().add("Content-Type", "multipart/form-data;boundary=be38b42a9ad2713f");
+        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(req, -1, 16 * 1024);
+        try {
+            decoder.offer(new DefaultHttpChunk(ChannelBuffers.wrappedBuffer(new byte[16 * 1024 + 1])));
+            fail();
+        } catch (RuntimeException e) {
+            assertEquals(HttpPostRequestDecoder.TooLongFormFieldException.class, e.getClass());
+        }
+    }
+    @Test
+    public void testFieldGreaterThanMaxBufferedBytesMultipartDecoder()
+			throws HttpPostRequestDecoder.ErrorDataDecoderException {
+        HttpRequest req = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
+        req.headers().add("Content-Type", "multipart/form-data;boundary=be38b42a9ad2713f");
+        byte[] bodyBytes = ("content-disposition: form-data; name=\"title\"\n" +
+          "content-length: 10\n" +
+          "content-type: text/plain; charset=UTF-8\n" +
+          "\n" +
+          "bar-stream\n" +
+          "--be38b42a9ad2713f\n").getBytes();
+        HttpPostRequestDecoder decoder = new HttpPostRequestDecoder(req, -1, bodyBytes.length);
+        decoder.offer(new DefaultHttpChunk(ChannelBuffers.wrappedBuffer(bodyBytes)));
     }
 }
