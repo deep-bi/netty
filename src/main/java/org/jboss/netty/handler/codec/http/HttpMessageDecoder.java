@@ -685,13 +685,13 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
         int cStart;
         int cEnd;
 
-        aStart = findNonWhitespace(sb, 0);
-        aEnd = findWhitespace(sb, aStart);
+        aStart = findNonSPLenient(sb, 0);
+        aEnd = findSPLenient(sb, aStart);
 
-        bStart = findNonWhitespace(sb, aEnd);
-        bEnd = findWhitespace(sb, bStart);
+        bStart = findNonSPLenient(sb, aEnd);
+        bEnd = findSPLenient(sb, bStart);
 
-        cStart = findNonWhitespace(sb, bEnd);
+        cStart = findNonSPLenient(sb, bEnd);
         cEnd = findEndOfString(sb);
 
         return new String[] {
@@ -708,7 +708,7 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
         int valueStart;
         int valueEnd;
 
-        nameStart = findNonWhitespace(sb, 0);
+        nameStart = findNonWhitespace(sb, 0, false);
         for (nameEnd = nameStart; nameEnd < length; nameEnd ++) {
             char ch = sb.charAt(nameEnd);
             // https://github.com/netty/netty/pull/9585
@@ -726,7 +726,7 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
               // is done in the DefaultHttpHeaders implementation.
               //
               // In the case of decoding a response we will "skip" the whitespace.
-              (!isDecodingRequest() && Character.isWhitespace(ch))) {
+              (!isDecodingRequest() && isOWS(ch))) {
                 break;
             }
         }
@@ -738,7 +738,7 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
             }
         }
 
-        valueStart = findNonWhitespace(sb, colonEnd);
+        valueStart = findNonWhitespace(sb, colonEnd, true);
         if (valueStart == length) {
             return new String[] {
                     sb.substring(nameStart, nameEnd),
@@ -753,15 +753,54 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
         };
     }
 
-    private static int findNonWhitespace(String sb, int offset) {
-        int result;
-        for (result = offset; result < sb.length(); result ++) {
-            if (!Character.isWhitespace(sb.charAt(result))) {
-                break;
+    private static int findNonSPLenient(String sb, int offset) {
+        for (int result = offset; result < sb.length(); ++result) {
+            char c = sb.charAt(result);
+            // See https://tools.ietf.org/html/rfc7230#section-3.5
+            if (isSPLenient(c)) {
+                continue;
+            }
+            if (Character.isWhitespace(c)) {
+                // Any other whitespace delimiter is invalid
+                throw new IllegalArgumentException("Invalid separator");
+            }
+            return result;
+        }
+        return sb.length();
+    }
+
+     private static int findSPLenient(String sb, int offset) {
+         for (int result = offset; result < sb.length(); ++result) {
+             if (isSPLenient(sb.charAt(result))) {
+                 return result;
+             }
+         }
+         return sb.length();
+     }
+ 
+     private static boolean isSPLenient(char c) {
+         // See https://tools.ietf.org/html/rfc7230#section-3.5
+         return c == ' ' || c == (char) 0x09 || c == (char) 0x0B || c == (char) 0x0C || c == (char) 0x0D;
+     }
+
+    private static int findNonWhitespace(String sb, int offset, boolean validateOWS) {
+        for (int result = offset; result < sb.length(); ++result) {
+            char c = sb.charAt(result);
+            if (!Character.isWhitespace(c)) {
+                return result;
+            } else if (validateOWS && !isOWS(c)) {
+                // Only OWS is supported for whitespace
+                throw new IllegalArgumentException(
+                  "Invalid separator, only a single space or horizontal tab allowed," + " but received a '" + c
+                    + "' (0x" + Integer.toHexString(c) + ")");
             }
         }
-        return result;
+        return sb.length();
     }
+
+     private static boolean isOWS(char ch) {
+         return ch == ' ' || ch == (char) 0x09;
+     }
 
     private static int findWhitespace(String sb, int offset) {
         int result;
