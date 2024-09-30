@@ -708,7 +708,7 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
         int valueStart;
         int valueEnd;
 
-        nameStart = findNonWhitespace(sb, 0, false);
+        nameStart = findNonWhitespace(sb, 0);
         for (nameEnd = nameStart; nameEnd < length; nameEnd ++) {
             char ch = sb.charAt(nameEnd);
             // https://github.com/netty/netty/pull/9585
@@ -738,7 +738,7 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
             }
         }
 
-        valueStart = findNonWhitespace(sb, colonEnd, true);
+        valueStart = findNonWhitespace(sb, colonEnd);
         if (valueStart == length) {
             return new String[] {
                     sb.substring(nameStart, nameEnd),
@@ -783,12 +783,12 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
          return c == ' ' || c == (char) 0x09 || c == (char) 0x0B || c == (char) 0x0C || c == (char) 0x0D;
      }
 
-    private static int findNonWhitespace(String sb, int offset, boolean validateOWS) {
+    private static int findNonWhitespace(String sb, int offset) {
         for (int result = offset; result < sb.length(); ++result) {
             char c = sb.charAt(result);
             if (!Character.isWhitespace(c)) {
                 return result;
-            } else if (validateOWS && !isOWS(c)) {
+            } else if (!isOWS(c)) {
                 // Only OWS is supported for whitespace
                 throw new IllegalArgumentException(
                   "Invalid separator, only a single space or horizontal tab allowed," + " but received a '" + c
