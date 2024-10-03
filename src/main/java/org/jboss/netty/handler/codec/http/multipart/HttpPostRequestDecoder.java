@@ -28,6 +28,9 @@ import java.util.List;
  * This decoder will decode Body and can handle POST BODY (both multipart and standard).
  */
 public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
+    static final int DEFAULT_MAX_FIELDS = 128;
+    static final int DEFAULT_MAX_BUFFERED_BYTES = 1024;
+
     /**
      * Does this request is a Multipart request
      */
@@ -42,6 +45,26 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
     public HttpPostRequestDecoder(HttpRequest request) throws ErrorDataDecoderException {
         this(new DefaultHttpDataFactory(DefaultHttpDataFactory.MINSIZE),
                 request, HttpConstants.DEFAULT_CHARSET);
+    }
+
+    /**
+     *
+     * @param request
+     *            the request to decode
+     * @param maxFields
+     *            the maximum number of fields the form can have, {@code -1} to disable
+     * @param maxBufferedBytes
+     *            the maximum number of bytes the decoder can buffer when decoding a field, {@code -1} to disable
+     * @throws NullPointerException
+     *             for request
+     * @throws ErrorDataDecoderException
+     *             if the default charset was wrong when decoding or other
+     *             errors
+     */
+    public HttpPostRequestDecoder(HttpRequest request, int maxFields, int maxBufferedBytes)
+      throws ErrorDataDecoderException {
+        this(new DefaultHttpDataFactory(DefaultHttpDataFactory.MINSIZE), request, HttpConstants.DEFAULT_CHARSET,
+          maxFields, maxBufferedBytes);
     }
 
     /**
@@ -80,6 +103,44 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
             decoder = new HttpPostMultipartRequestDecoder(factory, request, charset);
         } else {
             decoder = new HttpPostStandardRequestDecoder(factory, request, charset);
+        }
+    }
+
+    /**
+     *
+     * @param factory
+     *            the factory used to create InterfaceHttpData
+     * @param request
+     *            the request to decode
+     * @param charset
+     *            the charset to use as default
+     * @param maxFields
+     *            the maximum number of fields the form can have, {@code -1} to disable
+     * @param maxBufferedBytes
+     *            the maximum number of bytes the decoder can buffer when decoding a field, {@code -1} to disable
+     * @throws NullPointerException
+     *             for request or charset or factory
+     * @throws ErrorDataDecoderException
+     *             if the default charset was wrong when decoding or other
+     *             errors
+     */
+    public HttpPostRequestDecoder(HttpDataFactory factory, HttpRequest request, Charset charset,
+      int maxFields, int maxBufferedBytes) throws ErrorDataDecoderException {
+        if (factory == null) {
+            throw new NullPointerException("factory");
+        }
+        if (request == null) {
+            throw new NullPointerException("request");
+        }
+        if (charset == null) {
+            throw new NullPointerException("charset");
+        }
+
+        // Fill default values
+        if (isMultipart(request)) {
+            decoder = new HttpPostMultipartRequestDecoder(factory, request, charset, maxFields, maxBufferedBytes);
+        } else {
+            decoder = new HttpPostStandardRequestDecoder(factory, request, charset, maxFields, maxBufferedBytes);
         }
     }
 
@@ -376,5 +437,19 @@ public class HttpPostRequestDecoder implements InterfaceHttpPostRequestDecoder {
         public ErrorDataDecoderException(String msg, Throwable cause) {
             super(msg, cause);
         }
+    }
+
+    /**
+     * Exception when the maximum number of fields for a given form is reached
+     */
+    public static final class TooManyFormFieldsException extends RuntimeException {
+        private static final long serialVersionUID = 1336267941020800769L;
+    }
+
+    /**
+     * Exception when a field content is too long
+     */
+    public static final class TooLongFormFieldException extends RuntimeException {
+        private static final long serialVersionUID = 1336267941020800769L;
     }
 }
