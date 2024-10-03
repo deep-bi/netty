@@ -825,7 +825,7 @@ public abstract class HttpMessageDecoder extends ReplayingDecoder<State> {
          }
          return sb.length();
      }
- 
+
      private static boolean isSPLenient(char c) {
          // See https://tools.ietf.org/html/rfc7230#section-3.5
          return c == ' ' || c == (char) 0x09 || c == (char) 0x0B || c == (char) 0x0C || c == (char) 0x0D;
