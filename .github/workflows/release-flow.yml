@@ -1,0 +1,47 @@
+name: Release Workflow - Publish Library to Maven Repo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Extract version
+        run: |
+          VERSION=${GITHUB_REF_NAME#netty-}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Set up JDK 8 and Maven
+        uses: actions/setup-java@v4
+        with:
+            distribution: 'temurin'
+            java-version: 8
+            cache: 'maven'
+
+      - name: Install xmlstarlet (for act/local use)
+        run: |
+            sudo apt-get update
+            sudo apt-get install -y xmlstarlet
+
+      - name: Build with maven
+        run: |
+          mvn package -B -DskipTests
+
+      - name: Publish Netty Jar - Version ${{ env.VERSION }}
+        uses: RiV-chain/copy-local-file-maven-action@main
+        with:
+          artifact_repo: deep-bi/maven-repo
+          artifact_path: ./target/netty-${{ env.VERSION }}.jar
+          artifact_source_path: ./target/netty-${{ env.VERSION }}-sources.jar
+          gh_pat: ${{ secrets.MAVEN_PAT }}
+          artifact_id: netty
+          group_id: io.netty
+          version: ${{ env.VERSION }}
